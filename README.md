@@ -32,9 +32,9 @@ managed by Home Assistant with a Perific load balancer and Nord Pool electricity
 ```
 ai_charge/
 ├── pyscript/
-│   ├── ev_charge_controller.py   ← Pyscript HA controller (deploy to /config/pyscript/)
+│   ├── ev_charge_controller.py   ← Single-file pyscript (deploy to /config/pyscript/)
 │   └── modules/
-│       └── algorithm.py          ← Core algorithm (deploy to /config/pyscript/modules/)
+│       └── algorithm.py          ← Algorithm extracted for unit testing
 ├── ha_config/
 │   ├── input_helpers.yaml        ← Helper definitions (reference / manual fallback)
 │   ├── automations.yaml          ← HA automation YAML snippets
@@ -79,16 +79,15 @@ python deploy.py
 
 Creates all input helpers and 4 automations in HA. Idempotent – safe to run multiple times.
 
-### 2. Deploy pyscript files to HA
+### 2. Deploy pyscript to HA
 
-Copy the files to your HA instance, preserving the directory structure:
+Copy **one file** to your HA instance:
 
 ```
-/config/pyscript/
-├── ev_charge_controller.py       ← from pyscript/ev_charge_controller.py
-└── modules/
-    └── algorithm.py              ← from pyscript/modules/algorithm.py
+/config/pyscript/ev_charge_controller.py   ← from pyscript/ev_charge_controller.py
 ```
+
+That's it — the algorithm is embedded in the controller. No `modules/` directory needed.
 
 Then reload pyscript: **Developer Tools → Services → pyscript.reload**
 
@@ -157,7 +156,7 @@ Expected: **28 passed**
 
 | Symptom | Check |
 |---|---|
-| `ModuleNotFoundError: No module named 'algorithm'` | Ensure `algorithm.py` is in `/config/pyscript/modules/`, NOT `/config/pyscript/` |
+| `ModuleNotFoundError: No module named 'algorithm'` | You have an old version — replace with the single-file `ev_charge_controller.py` from this repo |
 | Algorithm not running | Is pyscript installed? Check HA logs for startup message |
 | Wrong phase current subtracted | Re-verify phase wiring; check `last_perific_last_current_l*` vs `gpn007772_current_phase_*` |
 | Charger not responding | Check `binary_sensor.gpn007772_online` and `sensor.gpn007772_charger_mode` |
