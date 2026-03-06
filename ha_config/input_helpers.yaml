@@ -1,0 +1,80 @@
+# Input helpers – reference YAML
+# These are created automatically by deploy.py.
+# For manual setup, add to configuration.yaml or create via HA UI (Settings → Helpers).
+
+input_boolean:
+  ev_smart_charging_enabled:
+    name: "EV Smart Charging Enabled"
+    icon: mdi:ev-station
+    initial: true
+
+input_datetime:
+  ev_charge_deadline:
+    name: "EV Charge Deadline"
+    has_date: false
+    has_time: true
+    icon: mdi:clock-end
+
+input_number:
+  ev_target_soc:
+    name: "EV Target SOC"
+    min: 50
+    max: 100
+    step: 5
+    initial: 90
+    unit_of_measurement: "%"
+    mode: slider
+    icon: mdi:battery-charging-90
+
+  ev_max_house_current:
+    name: "EV Max House Current"
+    min: 10
+    max: 20
+    step: 1
+    initial: 18
+    unit_of_measurement: "A"
+    mode: slider
+    icon: mdi:current-ac
+
+  ev_cheap_price_threshold:
+    name: "EV Cheap Price Threshold"
+    min: 0.0
+    max: 5.0
+    step: 0.05
+    initial: 0.80
+    unit_of_measurement: "SEK/kWh"
+    mode: box
+    icon: mdi:cash-clock
+
+  ev_charging_current_setpoint:
+    name: "EV Charging Current Setpoint"
+    min: 0
+    max: 16
+    step: 1
+    initial: 0
+    unit_of_measurement: "A"
+    mode: box
+    icon: mdi:lightning-bolt
+
+  ev_phase_switch_hysteresis_min:
+    name: "EV Phase Switch Hysteresis"
+    min: 1
+    max: 30
+    step: 1
+    initial: 5
+    unit_of_measurement: "min"
+    mode: box
+    icon: mdi:timer-sand
+
+input_select:
+  ev_charging_mode:
+    name: "EV Charging Mode"
+    options:
+      - "3-phase"
+      - "1-phase-p1"
+      - "1-phase-p2"
+      - "1-phase-p3"
+      - "paused"
+      - "disconnected"
+    initial: "disconnected"
+    icon: mdi:ev-plug-type2

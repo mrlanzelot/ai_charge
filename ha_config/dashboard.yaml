@@ -1,0 +1,107 @@
+# EV Smart Charging – Lovelace Dashboard Card
+# Add via HA UI: Dashboard → Edit → Add Card → Manual
+
+type: vertical-stack
+cards:
+
+  # ── Header ──────────────────────────────────────────────────────────────────
+  - type: markdown
+    content: "## ⚡ EV Smart Charging"
+
+  # ── SOC and status row ───────────────────────────────────────────────────────
+  - type: horizontal-stack
+    cards:
+      - type: gauge
+        entity: sensor.volvo_ex30_battery
+        name: Battery
+        min: 0
+        max: 100
+        severity:
+          green: 80
+          yellow: 50
+          red: 0
+        needle: true
+
+      - type: entities
+        title: Charging Status
+        entities:
+          - entity: sensor.gpn007772_charger_mode
+            name: Charger mode
+          - entity: input_select.ev_charging_mode
+            name: Smart mode
+          - entity: sensor.volvo_ex30_estimated_charging_time
+            name: Est. time remaining
+            unit: " min"
+          - entity: sensor.volvo_ex30_charging_power
+            name: Charging power
+
+  # ── Phase currents ───────────────────────────────────────────────────────────
+  - type: custom:apexcharts-card
+    header:
+      show: true
+      title: "Current per phase (A)"
+    graph_span: 1h
+    series:
+      - entity: sensor.last_perific_last_current_l1
+        name: "Total L1 (grid)"
+        color: "#e74c3c"
+      - entity: sensor.last_perific_last_current_l2
+        name: "Total L2 (grid)"
+        color: "#e67e22"
+      - entity: sensor.last_perific_last_current_l3
+        name: "Total L3 (grid)"
+        color: "#f39c12"
+      - entity: sensor.gpn007772_current_phase_1
+        name: "Charger P1 (L3)"
+        color: "#2980b9"
+      - entity: sensor.gpn007772_current_phase_2
+        name: "Charger P2 (L1)"
+        color: "#27ae60"
+      - entity: sensor.gpn007772_current_phase_3
+        name: "Charger P3 (L2)"
+        color: "#8e44ad"
+
+  # ── Config controls ──────────────────────────────────────────────────────────
+  - type: entities
+    title: Configuration
+    entities:
+      - entity: input_boolean.ev_smart_charging_enabled
+        name: Smart charging enabled
+      - entity: input_datetime.ev_charge_deadline
+        name: Charge deadline
+      - entity: input_number.ev_target_soc
+        name: Target SOC
+      - entity: input_number.ev_max_house_current
+        name: Fuse safety limit
+      - entity: input_number.ev_cheap_price_threshold
+        name: Cheap price threshold
+      - entity: input_number.ev_phase_switch_hysteresis_min
+        name: Phase switch hysteresis
+
+  # ── Live values ──────────────────────────────────────────────────────────────
+  - type: entities
+    title: Live readings
+    entities:
+      - entity: sensor.nord_pool_se3_current_price
+        name: Electricity price now
+      - entity: input_number.ev_charging_current_setpoint
+        name: Current setpoint (A)
+      - entity: sensor.gpn007772_allocated_charge_current
+        name: Allocated current (charger)
+      - entity: sensor.gpn007772_charge_power
+        name: Charger power
+      - entity: sensor.gpn007772_session_total_charge
+        name: Session energy
+
+  # ── Nord Pool price ──────────────────────────────────────────────────────────
+  - type: entities
+    title: Nord Pool SE3
+    entities:
+      - entity: sensor.nord_pool_se3_current_price
+        name: Current
+      - entity: sensor.nord_pool_se3_next_price
+        name: Next hour
+      - entity: sensor.nord_pool_se3_lowest_price
+        name: Today low
+      - entity: sensor.nord_pool_se3_highest_price
+        name: Today high

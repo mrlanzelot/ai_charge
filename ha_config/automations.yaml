@@ -1,0 +1,101 @@
+# Smart EV Charging – Home Assistant Automations
+# These are created automatically by deploy.py.
+# For manual import: Developer Tools → Template / YAML import.
+
+- alias: "EV – Enable smart charging at night"
+  description: >
+    Enables smart charging at 22:00 if the car is connected.
+    The pyscript controller takes over from this point.
+  triggers:
+    - trigger: time
+      at: "22:00:00"
+  conditions:
+    - condition: state
+      entity_id: sensor.gpn007772_charger_mode
+      state:
+        - connected_charging
+        - connected_requesting
+  actions:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.ev_smart_charging_enabled
+    - action: logbook.log
+      data:
+        name: EV Charger
+        message: Smart charging enabled for the night.
+  mode: single
+
+- alias: "EV – Disable smart charging in the morning"
+  description: >
+    At 06:00, turns off smart charging mode and restores the charger
+    to full 16 A for daytime use.
+  triggers:
+    - trigger: time
+      at: "06:00:00"
+  conditions: []
+  actions:
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.ev_smart_charging_enabled
+    - action: zaptec.limit_current
+      data:
+        installation_id: "8180b165-484b-47e0-9dc4-eb2630ae0dad"
+        available_current: 16
+    - action: logbook.log
+      data:
+        name: EV Charger
+        message: Smart charging ended. Charger restored to 16 A.
+  mode: single
+
+- alias: "EV – Deadline warning at 03:00"
+  description: >
+    Sends a persistent notification at 03:00 if the car is still charging
+    and won't reach its target SOC by 06:00 at the current rate.
+  triggers:
+    - trigger: time
+      at: "03:00:00"
+  conditions:
+    - condition: template
+      value_template: >
+        {{ states('sensor.gpn007772_charger_mode') in
+           ['connected_charging', 'connected_requesting']
+           and states('sensor.volvo_ex30_battery') | float(0)
+           < states('input_number.ev_target_soc') | float(90) }}
+  actions:
+    - action: persistent_notification.create
+      data:
+        title: "⚡ EV Charging Warning"
+        message: >
+          Car at {{ states('sensor.volvo_ex30_battery') }}%
+          (target {{ states('input_number.ev_target_soc') | int }}%).
+          Estimated time remaining:
+          {{ states('sensor.volvo_ex30_estimated_charging_time') }} min.
+        notification_id: ev_deadline_warning
+  mode: single
+
+- alias: "EV – Start charging on arrival if night window"
+  description: >
+    If car arrives home between 22:00 and 06:00 with smart charging
+    not yet enabled, turn it on immediately.
+  triggers:
+    - trigger: state
+      entity_id: sensor.gpn007772_charger_mode
+      to:
+        - connected_charging
+        - connected_requesting
+  conditions:
+    - condition: time
+      after: "22:00:00"
+      before: "06:00:00"
+    - condition: state
+      entity_id: input_boolean.ev_smart_charging_enabled
+      state: "off"
+  actions:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.ev_smart_charging_enabled
+    - action: logbook.log
+      data:
+        name: EV Charger
+        message: Car connected during night window – smart charging activated.
+  mode: single
