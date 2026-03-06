@@ -167,7 +167,12 @@ def _run():
 
     # Target reached — stop charging
     if d.mode == "done":
-        zaptec.limit_current(installation_id=INSTALLATION_ID, available_current=0)
+        zaptec.limit_current(
+            installation_id=INSTALLATION_ID,
+            available_current_phase1=0,
+            available_current_phase2=0,
+            available_current_phase3=0,
+        )
         _display("done", 0)
         return
 
@@ -177,17 +182,21 @@ def _run():
         button.press(entity_id="button.gpn007772_resume_charging")
         task.sleep(10)  # give charger time to transition
 
-    # Apply the charging current
+    # Apply the charging current — always use per-phase params to avoid stale limits
     if d.mode == "3-phase":
-        zaptec.limit_current(installation_id=INSTALLATION_ID, available_current=d.current)
-    elif d.mode == "waiting":
-        # Low headroom — set minimum on the phase with most room
-        best_phase = 1  # default to Zaptec P1 (Grid L3)
         zaptec.limit_current(
             installation_id=INSTALLATION_ID,
-            available_current_phase1=CHARGER_MIN_A if best_phase == 1 else 0,
-            available_current_phase2=CHARGER_MIN_A if best_phase == 2 else 0,
-            available_current_phase3=CHARGER_MIN_A if best_phase == 3 else 0,
+            available_current_phase1=d.current,
+            available_current_phase2=d.current,
+            available_current_phase3=d.current,
+        )
+    elif d.mode == "waiting":
+        # Low headroom — set minimum on Zaptec P1 (Grid L3, typically least loaded)
+        zaptec.limit_current(
+            installation_id=INSTALLATION_ID,
+            available_current_phase1=CHARGER_MIN_A,
+            available_current_phase2=0,
+            available_current_phase3=0,
         )
     else:
         p = int(d.mode[-1])
