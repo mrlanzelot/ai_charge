@@ -24,7 +24,8 @@ CHARGER_MAX_A = 16
 VOLTAGE = 230
 BATTERY_KWH = 69.0  # Volvo EX30 usable capacity
 
-CHARGEABLE = {"connected_charging", "connected_requesting"}
+# States where the car is connected and may need charging
+CONNECTED = {"connected_charging", "connected_requesting", "connected_finished"}
 
 
 # ── Data classes ────────────────────────────────────────────────────────────────
@@ -65,17 +66,19 @@ def _algorithm(perific, charger, soc, target, fuse, deadline_t, price, threshold
     else:
         c1, w1 = 0, 0
 
+    # If no headroom at all, use minimum on best available phase
     if w3 == 0 and w1 == 0:
-        return _D("paused", 0, 0, 0, f"headroom too low (L1={head.l1:.1f} L2={head.l2:.1f} L3={head.l3:.1f})")
+        return _D("waiting", CHARGER_MIN_A, 1, CHARGER_MIN_A * VOLTAGE,
+                  f"low headroom (L1={head.l1:.1f} L2={head.l2:.1f} L3={head.l3:.1f}) → {CHARGER_MIN_A}A on best phase")
 
     if w3 >= w1:
         dec = _D("3-phase", c3, 3, w3, f"3ph@{c3}A={w3}W")
     else:
         dec = _D(best_m, c1, 1, w1, f"1ph@{c1}A={w1}W")
 
-    # 4. SOC check
+    # 4. SOC check — only truly stop when target is reached
     if soc >= target:
-        return _D("paused", 0, 0, 0, "target SOC reached")
+        return _D("done", 0, 0, 0, "target SOC reached")
 
     # 5. Deadline + price refinement
     dl = _dt.datetime.combine(now.date(), deadline_t)
@@ -123,8 +126,8 @@ def _run():
     if state.get("input_boolean.ev_smart_charging_enabled") != "on":
         return
 
-    mode = state.get("sensor.gpn007772_charger_mode")
-    if mode not in CHARGEABLE:
+    charger_mode = state.get("sensor.gpn007772_charger_mode")
+    if charger_mode not in CONNECTED:
         _display("disconnected", 0)
         return
 
@@ -159,12 +162,33 @@ def _run():
     now = _dt.datetime.now()
     d = _algorithm(perific, charger, soc, target, fuse, deadline, price, threshold, now)
 
-    log.info("EV: %s %dA (%.0fW) SOC=%.0f%% | %s", d.mode, d.current, d.watts, soc, d.reason)
+    log.info("EV: %s %dA (%.0fW) SOC=%.0f%% charger=%s | %s",
+             d.mode, d.current, d.watts, soc, charger_mode, d.reason)
 
-    if d.mode == "paused":
+    # Target reached — stop charging
+    if d.mode == "done":
         zaptec.limit_current(installation_id=INSTALLATION_ID, available_current=0)
-    elif d.mode == "3-phase":
+        _display("done", 0)
+        return
+
+    # If charger stopped prematurely, try to resume it
+    if charger_mode == "connected_finished" and soc < target:
+        log.info("EV: charger stopped at %.0f%% (target %.0f%%) → resuming", soc, target)
+        button.press(entity_id="button.gpn007772_resume_charging")
+        task.sleep(10)  # give charger time to transition
+
+    # Apply the charging current
+    if d.mode == "3-phase":
         zaptec.limit_current(installation_id=INSTALLATION_ID, available_current=d.current)
+    elif d.mode == "waiting":
+        # Low headroom — set minimum on the phase with most room
+        best_phase = 1  # default to Zaptec P1 (Grid L3)
+        zaptec.limit_current(
+            installation_id=INSTALLATION_ID,
+            available_current_phase1=CHARGER_MIN_A if best_phase == 1 else 0,
+            available_current_phase2=CHARGER_MIN_A if best_phase == 2 else 0,
+            available_current_phase3=CHARGER_MIN_A if best_phase == 3 else 0,
+        )
     else:
         p = int(d.mode[-1])
         zaptec.limit_current(
@@ -180,6 +204,9 @@ def _run():
 def _display(mode, current):
     try:
         input_number.set_value(entity_id="input_number.ev_charging_current_setpoint", value=float(current))
-        input_select.select_option(entity_id="input_select.ev_charging_mode", option=mode)
+        # Map internal modes to input_select options
+        select_mode = mode if mode in ("3-phase", "1-phase-p1", "1-phase-p2", "1-phase-p3",
+                                        "paused", "disconnected") else "paused"
+        input_select.select_option(entity_id="input_select.ev_charging_mode", option=select_mode)
     except Exception:
         pass
