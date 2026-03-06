@@ -9,7 +9,7 @@ import math
 import pytest
 from datetime import datetime, time
 
-sys.path.insert(0, "pyscript")
+sys.path.insert(0, "pyscript/modules")
 from algorithm import (
     PhaseCurrents,
     ChargeDecision,

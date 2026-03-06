@@ -32,7 +32,9 @@ managed by Home Assistant with a Perific load balancer and Nord Pool electricity
 ```
 ai_charge/
 ├── pyscript/
-│   └── algorithm.py              ← Core algorithm (pure Python, no HA dependency)
+│   ├── ev_charge_controller.py   ← Pyscript HA controller (deploy to /config/pyscript/)
+│   └── modules/
+│       └── algorithm.py          ← Core algorithm (deploy to /config/pyscript/modules/)
 ├── ha_config/
 │   ├── input_helpers.yaml        ← Helper definitions (reference / manual fallback)
 │   ├── automations.yaml          ← HA automation YAML snippets
@@ -40,35 +42,31 @@ ai_charge/
 ├── tests/
 │   └── test_algorithm.py         ← 28 pytest unit tests
 ├── deploy.py                     ← Creates helpers + automations in HA
-├── requirements.txt              ← Runtime: websockets
-├── requirements-dev.txt          ← Dev: pytest
-└── PLAN.md                       ← Full design document
+├── requirements.txt
+├── requirements-dev.txt
+└── PLAN.md
 ```
-
-The algorithm logic lives in `pyscript/algorithm.py` and is also deployed to
-`/home/martin/dev/ha_pipeline/src/algorithm.py` for use by the ha_pipeline service.
 
 ## Architecture
 
 ```
-Perific/Zaptec sensor change
+Perific / Zaptec sensor changes
         │
         ▼
-HA WebSocket event (state_changed)
-        │
-        ▼
-ha_pipeline service (192.168.68.114:8787)  ← always running, subscribed
-        │  algorithm.py + ev_charger.py
-        ▼
-zaptec.limit_current via HA REST API
+pyscript  (inside Home Assistant)
+  ev_charge_controller.py
+  ├── @state_trigger on Perific L1/L2/L3 + charger mode
+  ├── @time_trigger every 5 min (deadline enforcement)
+  │
+  ├── reads sensors + input helpers
+  ├── runs algorithm.py (load balancing + pricing)
+  └── calls zaptec.limit_current
         │
         ▼
 Zaptec Go 2 adjusts charging current
 ```
 
-The `ha_pipeline` service (`/home/martin/dev/ha_pipeline`) runs as a **systemd user
-service** and subscribes to HA's WebSocket to receive sensor changes in real time.
-It also runs the algorithm every 5 minutes for deadline enforcement.
+Everything runs **inside HA via pyscript** – no external services needed.
 
 ## Setup
 
@@ -79,28 +77,24 @@ pip install -r requirements.txt
 python deploy.py
 ```
 
-This creates all input helpers and 4 automations in HA. It is **idempotent** – safe to
-run multiple times.
+Creates all input helpers and 4 automations in HA. Idempotent – safe to run multiple times.
 
-### 2. ha_pipeline service (EV algorithm runner)
+### 2. Deploy pyscript files to HA
 
-The EV charging algorithm runs in the `ha_pipeline` service on this machine.
-It is already installed as a systemd user service:
+Copy the files to your HA instance, preserving the directory structure:
 
-```bash
-systemctl --user status ha_pipeline.service   # check status
-systemctl --user restart ha_pipeline.service  # restart after code changes
-journalctl --user -u ha_pipeline.service -f   # follow logs
+```
+/config/pyscript/
+├── ev_charge_controller.py       ← from pyscript/ev_charge_controller.py
+└── modules/
+    └── algorithm.py              ← from pyscript/modules/algorithm.py
 ```
 
-Log file: `/home/martin/dev/ha_pipeline/log/ha_bridge.log`
-
-**Key env vars in `/home/martin/dev/ha_pipeline/.env`:**
-- `HA_BASE_URL=http://192.168.68.88:8123`
-- `HA_TOKEN=<long-lived token>`
-- `HA_WS_URL=ws://192.168.68.88:8123/api/websocket`
+Then reload pyscript: **Developer Tools → Services → pyscript.reload**
 
 ### 3. Verify
+
+Check the HA log for: `EV Charge Controller loaded (installation 8180b165-...)`
 
 ## Configuration
 
@@ -113,7 +107,6 @@ All settings are adjustable from the HA dashboard with no code changes:
 | `input_number.ev_target_soc` | 90% | Charge target SOC |
 | `input_number.ev_max_house_current` | 18 A | Safety margin (actual fuses: 20 A) |
 | `input_number.ev_cheap_price_threshold` | 0.80 SEK/kWh | Below = charge at max safe speed |
-| `input_number.ev_phase_switch_hysteresis_min` | 5 min | Min time between 3-phase ↔ 1-phase switches |
 
 ## Algorithm
 
@@ -164,8 +157,8 @@ Expected: **28 passed**
 
 | Symptom | Check |
 |---|---|
-| Algorithm not running | Is pyscript installed? Check HA logs |
+| `ModuleNotFoundError: No module named 'algorithm'` | Ensure `algorithm.py` is in `/config/pyscript/modules/`, NOT `/config/pyscript/` |
+| Algorithm not running | Is pyscript installed? Check HA logs for startup message |
 | Wrong phase current subtracted | Re-verify phase wiring; check `last_perific_last_current_l*` vs `gpn007772_current_phase_*` |
 | Charger not responding | Check `binary_sensor.gpn007772_online` and `sensor.gpn007772_charger_mode` |
-| Duplicate input helpers | Run the cleanup snippet in `deploy.py` comments |
 | Car not charging at night | Check `input_boolean.ev_smart_charging_enabled` = on |
