@@ -4,15 +4,16 @@ Smart EV Charging Controller – single-file pyscript for Home Assistant.
 Deploy to: /config/pyscript/ev_charge_controller.py  (this is the only file needed)
 
 Strategy:
-  - Dynamic 3/1-phase switching based on per-phase headroom
+  - 3-phase charging only (Zaptec Go 2 "ThreeToOneFixed" can only do 1-phase
+    on Zaptec Phase 1 = Grid L3, which is typically the most loaded phase)
   - Ramp up slowly (+1A per cycle), ramp down immediately if over limit
-  - Hysteresis prevents rapid mode toggling between 3-phase and 1-phase
+  - Pause when min headroom < 6A (can't safely charge on any 3-phase config)
   - Triggers only on Perific sensor changes + 5-minute timer (NOT on charger mode)
 
 Phase mapping (Zaptec Go 2 rotation L3, L1, L2 – TN):
-  Grid L1 = Zaptec Phase 2   →  1-phase-p2 = send (0, I, 0)
-  Grid L2 = Zaptec Phase 3   →  1-phase-p3 = send (0, 0, I)
-  Grid L3 = Zaptec Phase 1   →  1-phase-p1 = send (I, 0, 0)
+  Grid L1 = Zaptec Phase 2
+  Grid L2 = Zaptec Phase 3
+  Grid L3 = Zaptec Phase 1
 """
 
 import math
@@ -29,16 +30,8 @@ BATTERY_KWH = 69.0
 CONNECTED = {"connected_charging", "connected_requesting", "connected_finished"}
 RESUME_COOLDOWN_S = 300  # only attempt resume every 5 minutes
 
-# Grid-phase → Zaptec-phase mapping for 1-phase charging
-_1PH_MODES = {
-    "l1": "1-phase-p2",  # Grid L1 headroom → charge on Zaptec Phase 2
-    "l2": "1-phase-p3",  # Grid L2 headroom → charge on Zaptec Phase 3
-    "l3": "1-phase-p1",  # Grid L3 headroom → charge on Zaptec Phase 1
-}
-
 # ── Persistent state ───────────────────────────────────────────────────────────
 _current_setpoint = CHARGER_MIN_A  # last commanded current
-_phase_mode = "3-phase"            # current charging mode
 _last_resume_time = None           # last time we called resume_charging
 
 
@@ -47,15 +40,6 @@ class _P:
     l1: float; l2: float; l3: float
     def mn(self): return min(self.l1, self.l2, self.l3)
     def mx(self): return max(self.l1, self.l2, self.l3)
-
-    def best_phase(self):
-        """Return label of the phase with highest value."""
-        if self.l1 >= self.l2 and self.l1 >= self.l3:
-            return "l1"
-        return "l2" if self.l2 >= self.l3 else "l3"
-
-    def get(self, label):
-        return {"l1": self.l1, "l2": self.l2, "l3": self.l3}[label]
 
 
 # ── Pyscript triggers ──────────────────────────────────────────────────────────
@@ -77,7 +61,7 @@ def ev_control(**kwargs):
 
 
 def _run():
-    global _current_setpoint, _phase_mode, _last_resume_time
+    global _current_setpoint, _last_resume_time
 
     if state.get("input_boolean.ev_smart_charging_enabled") != "on":
         return
@@ -107,7 +91,6 @@ def _run():
     fuse      = float(state.get("input_number.ev_max_house_current") or 19)
     target    = float(state.get("input_number.ev_target_soc") or 90)
     threshold = float(state.get("input_number.ev_cheap_price_threshold") or 0.8)
-    hyst      = float(state.get("input_number.ev_phase_switch_hysteresis") or 5)
     now       = _dt.datetime.now()
 
     # ── SOC check ───────────────────────────────────────────────────────────
@@ -115,8 +98,7 @@ def _run():
         log.info("EV: SOC %.0f%% ≥ target %.0f%% → done", soc, target)
         _send(0, 0, 0)
         _current_setpoint = CHARGER_MIN_A
-        _phase_mode = "3-phase"
-        _display("done", 0)
+        _display("paused", 0)
         return
 
     # ── Resume if charger stopped prematurely (with cooldown) ───────────────
@@ -134,35 +116,18 @@ def _run():
     house = _P(perific.l1 - charger.l2, perific.l2 - charger.l3, perific.l3 - charger.l1)
     head  = _P(fuse - house.l1, fuse - house.l2, fuse - house.l3)
 
-    # ── Phase mode selection ────────────────────────────────────────────────
-    max_safe_3ph = min(CHARGER_MAX_A, int(head.mn()))
-    best_grid    = head.best_phase()
-    max_safe_1ph = min(CHARGER_MAX_A, int(head.get(best_grid)))
+    # 3-phase: bottlenecked by phase with least headroom
+    max_safe = min(CHARGER_MAX_A, int(head.mn()))
 
-    if _phase_mode == "3-phase":
-        if max_safe_3ph >= CHARGER_MIN_A:
-            mode, max_safe, n_ph = "3-phase", max_safe_3ph, 3
-        elif max_safe_1ph >= CHARGER_MIN_A:
-            mode, max_safe, n_ph = _1PH_MODES[best_grid], max_safe_1ph, 1
-            _current_setpoint = CHARGER_MIN_A
-        else:
-            mode, max_safe, n_ph = _1PH_MODES[best_grid], CHARGER_MIN_A, 1
-            _current_setpoint = CHARGER_MIN_A
-    else:
-        # Currently 1-phase – switch to 3-phase only if headroom recovered + hysteresis
-        if max_safe_3ph >= CHARGER_MIN_A + hyst:
-            mode, max_safe, n_ph = "3-phase", max_safe_3ph, 3
-            _current_setpoint = CHARGER_MIN_A
-        elif max_safe_1ph >= CHARGER_MIN_A:
-            new_1ph = _1PH_MODES[best_grid]
-            mode, max_safe, n_ph = new_1ph, max_safe_1ph, 1
-            if new_1ph != _phase_mode:
-                _current_setpoint = CHARGER_MIN_A
-        else:
-            mode, max_safe, n_ph = _1PH_MODES[best_grid], CHARGER_MIN_A, 1
-            _current_setpoint = CHARGER_MIN_A
+    # ── Pause if insufficient headroom ──────────────────────────────────────
+    if max_safe < CHARGER_MIN_A:
+        log.info("EV: headroom too low (L1=%.1f L2=%.1f L3=%.1f, min=%d < %dA) → paused",
+                 head.l1, head.l2, head.l3, max_safe, CHARGER_MIN_A)
+        _current_setpoint = CHARGER_MIN_A
+        _display("paused", 0)
+        return
 
-    # ── Deadline minimum (adjusted for active phases) ───────────────────────
+    # ── Deadline minimum ────────────────────────────────────────────────────
     dl_str = state.get("input_datetime.ev_charge_deadline") or "06:00:00"
     try:
         h, m = dl_str.split(":")[:2]
@@ -177,7 +142,7 @@ def _run():
 
     if hrs > 0:
         needed_kwh = (target - soc) / 100.0 * BATTERY_KWH
-        min_a = int(math.ceil(needed_kwh / hrs * 1000.0 / (n_ph * VOLTAGE)))
+        min_a = int(math.ceil(needed_kwh / hrs * 1000.0 / (3 * VOLTAGE)))
         min_a = max(CHARGER_MIN_A, min(CHARGER_MAX_A, min_a))
     else:
         min_a = CHARGER_MIN_A
@@ -198,25 +163,14 @@ def _run():
 
     new_current = max(CHARGER_MIN_A, min(max_safe, new_current))
 
-    log.info("EV: %s %dA→%dA (safe=%d desired=%d deadline=%d) SOC=%.0f%% price=%.2f | "
+    log.info("EV: 3ph %dA→%dA (safe=%d desired=%d deadline=%d) SOC=%.0f%% price=%.2f | "
              "head L1=%.1f L2=%.1f L3=%.1f | house L1=%.1f L2=%.1f L3=%.1f",
-             mode, _current_setpoint, new_current, max_safe, desired, min_a, soc, price,
+             _current_setpoint, new_current, max_safe, desired, min_a, soc, price,
              head.l1, head.l2, head.l3, house.l1, house.l2, house.l3)
 
     _current_setpoint = new_current
-    _phase_mode = mode
-
-    # ── Send per-phase command ──────────────────────────────────────────────
-    if mode == "3-phase":
-        _send(new_current, new_current, new_current)
-    elif mode == "1-phase-p1":
-        _send(new_current, 0, 0)
-    elif mode == "1-phase-p2":
-        _send(0, new_current, 0)
-    elif mode == "1-phase-p3":
-        _send(0, 0, new_current)
-
-    _display(mode, new_current)
+    _send(new_current, new_current, new_current)
+    _display("3-phase", new_current)
 
 
 def _send(p1, p2, p3):
