@@ -6,6 +6,8 @@ Deploy to: /config/pyscript/ev_charge_controller.py  (this is the only file need
 Strategy:
   - 3-phase charging only (Zaptec Go 2 "ThreeToOneFixed" can only do 1-phase
     on Zaptec Phase 1 = Grid L3, which is typically the most loaded phase)
+  - Conservative: always target the deadline-calculated rate (min_a) to spread
+    charging evenly over the time window, instead of charging at max speed
   - Ramp up slowly (+1A per cycle), ramp down immediately if over limit
   - Pause when min headroom < 6A (can't safely charge on any 3-phase config)
   - Triggers only on Perific sensor changes + 5-minute timer (NOT on charger mode)
@@ -147,11 +149,10 @@ def _run():
     else:
         min_a = CHARGER_MIN_A
 
-    # ── Price-aware target ──────────────────────────────────────────────────
-    if price <= threshold:
-        desired = max_safe  # cheap: charge as fast as safely possible
-    else:
-        desired = min_a     # expensive: only what deadline requires
+    # ── Target current: spread charging evenly to meet deadline ───────────
+    # Always use the deadline-calculated rate to avoid overloading.
+    # max_safe acts as a safety cap, not a target.
+    desired = min(min_a, max_safe)
 
     # ── Ramp: slow up (+1A), fast down (instant) ───────────────────────────
     if desired > _current_setpoint:
