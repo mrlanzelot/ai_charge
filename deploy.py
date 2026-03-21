@@ -73,6 +73,14 @@ INPUT_BOOLEANS = [
 
 INPUT_DATETIMES = [
     {
+        "name": "EV Charge Start Time",
+        "object_id": "ev_charge_start_time",
+        "has_date": False,
+        "has_time": True,
+        "initial": "22:00:00",
+        "icon": "mdi:clock-start",
+    },
+    {
         "name": "EV Charge Deadline",
         "object_id": "ev_charge_deadline",
         "has_date": False,
@@ -96,8 +104,8 @@ INPUT_SELECTS = [
 AUTOMATIONS = [
     {
         "alias": "EV – Enable smart charging at night",
-        "description": "Enables smart charging at 22:00 if car is connected.",
-        "triggers": [{"trigger": "time", "at": "22:00:00"}],
+        "description": "Enables smart charging at the configured start time if car is connected.",
+        "triggers": [{"trigger": "time", "at": "input_datetime.ev_charge_start_time"}],
         "conditions": [
             {
                 "condition": "state",

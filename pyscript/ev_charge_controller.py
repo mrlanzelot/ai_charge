@@ -46,6 +46,7 @@ NORDPOOL_API = ("https://dataportal-api.nordpoolgroup.com/api/DayAheadPrices"
 # ── Persistent state ───────────────────────────────────────────────────────────
 _current_setpoint = CHARGER_MIN_A
 _last_resume_time = None
+_force_start = False
 _price_cache = []       # [(hour_epoch, avg_eur_mwh)] sorted by hour
 _price_fetched_at = 0.0
 
@@ -163,6 +164,27 @@ def _price_schedule(now, deadline_dt, needed_kwh):
     return is_cheap, remaining_cheap, cheap_labels
 
 
+# ── Time window helper ─────────────────────────────────────────────────────────
+
+def _in_charge_window(now):
+    """Check if current time is within the charge start→deadline window."""
+    start_str = state.get("input_datetime.ev_charge_start_time") or "22:00:00"
+    end_str = state.get("input_datetime.ev_charge_deadline") or "06:00:00"
+    try:
+        sh, sm = start_str.split(":")[:2]
+        eh, em = end_str.split(":")[:2]
+        start = _dt.time(int(sh), int(sm))
+        end = _dt.time(int(eh), int(em))
+    except Exception:
+        start, end = _dt.time(22, 0), _dt.time(6, 0)
+
+    t = now.time()
+    if start > end:  # overnight window (e.g. 22:00→06:00)
+        return t >= start or t < end
+    else:  # same-day window (e.g. 08:00→18:00)
+        return start <= t < end
+
+
 # ── Pyscript triggers ──────────────────────────────────────────────────────────
 
 @time_trigger("startup")
@@ -179,6 +201,17 @@ def ev_startup():
               friendly_name="EV Schedule")
 
 
+@state_trigger("input_button.ev_force_start")
+def ev_force_start(**kwargs):
+    """Force-start charging immediately, bypassing time window and price schedule."""
+    global _force_start
+    _force_start = True
+    log.info("EV: Force start triggered — enabling charging now")
+    input_boolean.turn_on(entity_id="input_boolean.ev_smart_charging_enabled")
+    task.sleep(2)
+    _run()
+
+
 @state_trigger(
     "sensor.last_perific_last_current_l1",
     "sensor.last_perific_last_current_l2",
@@ -192,10 +225,22 @@ def ev_control(**kwargs):
 
 
 def _run():
-    global _current_setpoint, _last_resume_time
+    global _current_setpoint, _last_resume_time, _force_start
 
     if state.get("input_boolean.ev_smart_charging_enabled") != "on":
         _set_status("disabled", "Smart charging toggle is off")
+        return
+
+    now = _dt.datetime.now()
+
+    # ── Time window check (force-start bypasses) ───────────────────────────
+    if _force_start:
+        _force_start = False  # one-shot: cleared after use
+        log.info("EV: Force start active — bypassing time window")
+    elif not _in_charge_window(now):
+        start_str = state.get("input_datetime.ev_charge_start_time") or "22:00"
+        _set_status("outside_window",
+                    f"Outside charge window (starts {start_str})")
         return
 
     charger_mode = state.get("sensor.gpn007772_charger_mode")
@@ -224,7 +269,6 @@ def _run():
 
     fuse   = float(state.get("input_number.ev_max_house_current") or 19)
     target = float(state.get("input_number.ev_target_soc") or 90)
-    now    = _dt.datetime.now()
 
     # ── SOC check ───────────────────────────────────────────────────────────
     if soc >= target:

@@ -9,6 +9,12 @@ input_boolean:
     initial: true
 
 input_datetime:
+  ev_charge_start_time:
+    name: "EV Charge Start Time"
+    has_date: false
+    has_time: true
+    icon: mdi:clock-start
+
   ev_charge_deadline:
     name: "EV Charge Deadline"
     has_date: false

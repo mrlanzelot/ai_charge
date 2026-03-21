@@ -4,11 +4,11 @@
 
 - alias: "EV – Enable smart charging at night"
   description: >
-    Enables smart charging at 22:00 if the car is connected.
+    Enables smart charging at the configured start time if the car is connected.
     The pyscript controller takes over from this point.
   triggers:
     - trigger: time
-      at: "22:00:00"
+      at: input_datetime.ev_charge_start_time
   conditions:
     - condition: state
       entity_id: sensor.gpn007772_charger_mode
@@ -75,7 +75,7 @@
 
 - alias: "EV – Start charging on arrival if night window"
   description: >
-    If car arrives home between 22:00 and 06:00 with smart charging
+    If car arrives home during the charge window with smart charging
     not yet enabled, turn it on immediately.
   triggers:
     - trigger: state
@@ -84,9 +84,16 @@
         - connected_charging
         - connected_requesting
   conditions:
-    - condition: time
-      after: "22:00:00"
-      before: "06:00:00"
+    - condition: template
+      value_template: >
+        {% set start = states('input_datetime.ev_charge_start_time') | default('22:00:00') %}
+        {% set end = states('input_datetime.ev_charge_deadline') | default('06:00:00') %}
+        {% set now_t = now().strftime('%H:%M:%S') %}
+        {% if start > end %}
+          {{ now_t >= start or now_t < end }}
+        {% else %}
+          {{ start <= now_t < end }}
+        {% endif %}
     - condition: state
       entity_id: input_boolean.ev_smart_charging_enabled
       state: "off"
@@ -97,5 +104,5 @@
     - action: logbook.log
       data:
         name: EV Charger
-        message: Car connected during night window – smart charging activated.
+        message: Car connected during charge window – smart charging activated.
   mode: single
