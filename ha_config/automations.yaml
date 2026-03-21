@@ -80,6 +80,7 @@
   triggers:
     - trigger: state
       entity_id: sensor.gpn007772_charger_mode
+      from: disconnected
       to:
         - connected_charging
         - connected_requesting

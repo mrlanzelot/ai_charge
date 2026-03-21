@@ -169,6 +169,37 @@ AUTOMATIONS = [
         ],
         "mode": "single",
     },
+    {
+        "alias": "EV – Start charging on arrival if night window",
+        "description": "If car arrives during the charge window with smart charging not yet enabled, turn it on.",
+        "triggers": [{
+            "trigger": "state",
+            "entity_id": "sensor.gpn007772_charger_mode",
+            "from": "disconnected",
+            "to": ["connected_charging", "connected_requesting"],
+        }],
+        "conditions": [
+            {"condition": "template",
+             "value_template": (
+                 "{% set start = states('input_datetime.ev_charge_start_time') | default('22:00:00') %}"
+                 "{% set end = states('input_datetime.ev_charge_deadline') | default('06:00:00') %}"
+                 "{% set now_t = now().strftime('%H:%M:%S') %}"
+                 "{% if start > end %}{{ now_t >= start or now_t < end }}"
+                 "{% else %}{{ start <= now_t < end }}{% endif %}"
+             )},
+            {"condition": "state",
+             "entity_id": "input_boolean.ev_smart_charging_enabled",
+             "state": "off"},
+        ],
+        "actions": [
+            {"action": "input_boolean.turn_on",
+             "target": {"entity_id": "input_boolean.ev_smart_charging_enabled"}},
+            {"action": "logbook.log",
+             "data": {"name": "EV Charger",
+                      "message": "Car connected during charge window – smart charging activated."}},
+        ],
+        "mode": "single",
+    },
 ]
 
 
