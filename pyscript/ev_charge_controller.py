@@ -212,6 +212,15 @@ def ev_force_start(**kwargs):
     _run()
 
 
+@state_trigger("input_boolean.ev_smart_charging_enabled == 'off'")
+def ev_toggle_off(**kwargs):
+    """Immediately pause charging when smart charging is disabled."""
+    log.info("EV: Smart charging disabled — pausing charger")
+    _send(0, 0, 0)
+    _set_status("disabled", "Smart charging toggled off — charger paused")
+    _display("paused", 0)
+
+
 @state_trigger(
     "sensor.last_perific_last_current_l1",
     "sensor.last_perific_last_current_l2",
