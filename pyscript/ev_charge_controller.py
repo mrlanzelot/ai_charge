@@ -169,6 +169,14 @@ def _price_schedule(now, deadline_dt, needed_kwh):
 def ev_startup():
     log.info("EV Charge Controller loaded (installation %s)", INSTALLATION_ID)
     _set_status("idle", "Controller loaded, waiting for trigger")
+    state.set("pyscript.ev_headroom", "—",
+              headroom_l1="—", headroom_l2="—", headroom_l3="—",
+              house_l1="—", house_l2="—", house_l3="—",
+              unit_of_measurement="A", friendly_name="EV Min Headroom")
+    state.set("pyscript.ev_schedule", "—",
+              is_cheap_hour="—", charge_hours_remaining="—",
+              needed_kwh="—", current_price="—",
+              friendly_name="EV Schedule")
 
 
 @state_trigger(
