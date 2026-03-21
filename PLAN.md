@@ -66,10 +66,14 @@ energy_remaining     = (target_soc - current_soc) / 100 * 69.0   # kWh
 min_for_deadline     = energy_remaining / (hours_to_06 * active_phases * 0.230)
 
 # ── Nord Pool price optimization ────────────────────────────────────────────
-IF current_price <= cheap_threshold:
-    final_current = current                            # charge fast
+# Fetch hourly prices via API, rank by cheapness, pick N cheapest hours
+# N = hours needed at min current (6A) with 20% buffer
+IF current_hour in cheapest_N_hours:
+    final_current = min_for_deadline_spread_over_cheap_hours
+ELIF charger in connected_requesting:
+    WAIT (don't start charging in expensive hour)
 ELSE:
-    final_current = max(current, clamp(min_for_deadline, 6, 16))  # deadline only
+    continue at current rate (don't stop mid-charge)
 
 final_current = clamp(final_current, 6, 16)
 ```
@@ -117,11 +121,12 @@ The `zaptec.limit_current` service supports per-phase limits when called with
 | `input_datetime.ev_charge_deadline` | 06:00 | Car must be full by this time |
 | `input_number.ev_target_soc` | 90% | Charge target (%) |
 | `input_number.ev_max_house_current` | 18A | Safety margin (actual fuses: 20A) |
-| `input_number.ev_cheap_price_threshold` | 0.80 SEK/kWh | Below = charge at max safe current |
 | `input_boolean.ev_smart_charging_enabled` | on | Manual kill switch |
 | `input_number.ev_charging_current_setpoint` | read-only | Current applied setpoint (for dashboard) |
 | `input_select.ev_charging_mode` | read-only | Current mode: "3-phase", "1-phase-L1/L2/L3", "paused" |
 | `input_number.ev_phase_switch_hysteresis_min` | 5 min | Min minutes between phase-mode switches |
+
+> **Removed**: `input_number.ev_cheap_price_threshold` – superseded by Nord Pool API-based hourly ranking (no fixed threshold needed).
 
 ## Implementation Todos
 
@@ -167,8 +172,23 @@ Lovelace card showing:
 - Smart charging status + manual override toggle
 - Current price vs threshold indicator
 
-### T8 – Nord Pool price optimization
-Included in core algorithm (T3). Cheap/expensive threshold configurable via input helper.
+### T8 – Nord Pool price optimization ✅ DONE
+Implemented via Nord Pool API (hourly price ranking, not fixed threshold).
+`cheap_price_threshold` input helper no longer used — to be removed.
+
+### T9 – Phase rotation change & 1-phase re-introduction (UPCOMING)
+User will physically change Zaptec phase rotation wiring so 1-phase mode lands
+on the least-loaded grid phase. After the change:
+1. Update phase mapping constants in `ev_charge_controller.py`
+2. Re-enable dynamic 3/1-phase switching with hysteresis
+3. Keep `ev_phase_switch_hysteresis_min` and `ev_charging_mode` (1-phase options)
+
+### T10 – Remove `cheap_price_threshold`
+Delete unused `input_number.ev_cheap_price_threshold` from:
+- `ha_config/input_helpers.yaml`
+- `deploy.py`
+- `ha_config/dashboard.yaml`
+- HA instance (entity)
 
 ## Safety Rules
 - Never command below 6A (Zaptec hardware minimum) on any active phase

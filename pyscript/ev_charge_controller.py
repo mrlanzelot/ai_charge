@@ -15,6 +15,14 @@ Phase mapping (Zaptec Go 2 rotation L3, L1, L2 – TN):
   Grid L1 = Zaptec Phase 2
   Grid L2 = Zaptec Phase 3
   Grid L3 = Zaptec Phase 1
+
+Observability:
+  Runtime state exposed as pyscript.ev_* entities visible on the HA dashboard.
+  To see log.info() in HA system log, add to configuration.yaml:
+    logger:
+      default: warning
+      logs:
+        custom_components.pyscript.file.ev_charge_controller: info
 """
 
 import math
@@ -47,6 +55,35 @@ class _P:
     l1: float; l2: float; l3: float
     def mn(self): return min(self.l1, self.l2, self.l3)
     def mx(self): return max(self.l1, self.l2, self.l3)
+
+
+# ── Observability helpers ──────────────────────────────────────────────────────
+
+def _set_status(status, reason, **attrs):
+    """Expose controller state as pyscript entities for dashboard/debugging."""
+    state.set("pyscript.ev_controller_status", status, reason=reason, **attrs)
+
+def _set_headroom(head, house):
+    state.set("pyscript.ev_headroom", f"{head.mn():.1f}",
+              headroom_l1=f"{head.l1:.1f}", headroom_l2=f"{head.l2:.1f}",
+              headroom_l3=f"{head.l3:.1f}",
+              house_l1=f"{house.l1:.1f}", house_l2=f"{house.l2:.1f}",
+              house_l3=f"{house.l3:.1f}",
+              unit_of_measurement="A",
+              friendly_name="EV Min Headroom")
+
+def _set_schedule(is_cheap, charge_hrs, needed_kwh, price, cheap_hours_list=None):
+    attrs = {
+        "is_cheap_hour": is_cheap,
+        "charge_hours_remaining": charge_hrs,
+        "needed_kwh": f"{needed_kwh:.1f}",
+        "current_price": f"{price:.2f}",
+        "friendly_name": "EV Schedule",
+    }
+    if cheap_hours_list:
+        attrs["cheap_hours"] = cheap_hours_list
+    label = "cheap" if is_cheap else "expensive"
+    state.set("pyscript.ev_schedule", label, **attrs)
 
 
 # ── Nord Pool price functions ──────────────────────────────────────────────────
@@ -90,8 +127,8 @@ def _fetch_prices(now):
 def _price_schedule(now, deadline_dt, needed_kwh):
     """
     Determine if current hour is among the cheapest needed to finish by deadline.
-    Returns (should_charge_now: bool, remaining_charge_hours: int).
-    Falls back to (True, total_hours) if no price data.
+    Returns (should_charge_now, remaining_charge_hours, cheap_hours_labels).
+    Falls back to (True, total_hours, []) if no price data.
     """
     now_ts = now.timestamp()
     dl_ts = deadline_dt.timestamp()
@@ -99,18 +136,17 @@ def _price_schedule(now, deadline_dt, needed_kwh):
 
     prices = _fetch_prices(now)
     if not prices:
-        return True, total_hrs
+        return True, total_hrs, []
 
     remaining = [(h, p) for h, p in prices if h >= now_ts - 3600 and h < dl_ts]
     if not remaining:
-        return True, total_hrs
+        return True, total_hrs, []
 
-    # Hours needed at minimum rate, with 20% buffer for headroom-limited periods
     kw_min = CHARGER_MIN_A * 3 * VOLTAGE / 1000.0
     hours_needed = max(1, math.ceil(needed_kwh / kw_min * 1.2))
 
     if hours_needed >= len(remaining):
-        return True, len(remaining)
+        return True, len(remaining), []
 
     cheapest = sorted(remaining, key=lambda x: x[1])[:hours_needed]
     cheap_set = {h for h, _ in cheapest}
@@ -119,7 +155,12 @@ def _price_schedule(now, deadline_dt, needed_kwh):
     is_cheap = cur_hour in cheap_set
     remaining_cheap = max(1, sum(1 for h in cheap_set if h >= cur_hour))
 
-    return is_cheap, remaining_cheap
+    # Format cheap hours for dashboard display
+    cheap_labels = sorted(
+        _dt.datetime.fromtimestamp(h).strftime("%H:%M") for h in cheap_set
+    )
+
+    return is_cheap, remaining_cheap, cheap_labels
 
 
 # ── Pyscript triggers ──────────────────────────────────────────────────────────
@@ -127,6 +168,7 @@ def _price_schedule(now, deadline_dt, needed_kwh):
 @time_trigger("startup")
 def ev_startup():
     log.info("EV Charge Controller loaded (installation %s)", INSTALLATION_ID)
+    _set_status("idle", "Controller loaded, waiting for trigger")
 
 
 @state_trigger(
@@ -145,11 +187,13 @@ def _run():
     global _current_setpoint, _last_resume_time
 
     if state.get("input_boolean.ev_smart_charging_enabled") != "on":
+        _set_status("disabled", "Smart charging toggle is off")
         return
 
     charger_mode = state.get("sensor.gpn007772_charger_mode")
     if charger_mode not in CONNECTED:
         _display("disconnected", 0)
+        _set_status("disconnected", "Car not connected", charger_mode=charger_mode or "unknown")
         return
 
     try:
@@ -167,6 +211,7 @@ def _run():
         price = float(state.get("sensor.nord_pool_se3_current_price"))
     except (ValueError, TypeError) as e:
         log.warning("EV: sensor read error – %s", e)
+        _set_status("error", f"Sensor read error: {e}")
         return
 
     fuse   = float(state.get("input_number.ev_max_house_current") or 19)
@@ -179,6 +224,8 @@ def _run():
         _send(0, 0, 0)
         _current_setpoint = CHARGER_MIN_A
         _display("paused", 0)
+        _set_status("done", f"SOC {soc:.0f}% ≥ target {target:.0f}%",
+                    soc=f"{soc:.0f}", target=f"{target:.0f}")
         return
 
     # ── Resume if charger stopped prematurely (with cooldown) ───────────────
@@ -187,18 +234,27 @@ def _run():
             log.info("EV: charger stopped at %.0f%% → resuming", soc)
             _last_resume_time = now
             button.press(entity_id="button.gpn007772_resume_charging")
+            _set_status("resuming", f"Charger stopped at {soc:.0f}%, sending resume",
+                        soc=f"{soc:.0f}")
+        else:
+            wait = int(RESUME_COOLDOWN_S - (now - _last_resume_time).total_seconds())
+            _set_status("cooldown", f"Resume cooldown, {wait}s remaining",
+                        soc=f"{soc:.0f}", cooldown_remaining=f"{wait}")
         return
 
     # ── Headroom ────────────────────────────────────────────────────────────
     house = _P(perific.l1 - charger.l2, perific.l2 - charger.l3, perific.l3 - charger.l1)
     head  = _P(fuse - house.l1, fuse - house.l2, fuse - house.l3)
     max_safe = min(CHARGER_MAX_A, int(head.mn()))
+    _set_headroom(head, house)
 
     if max_safe < CHARGER_MIN_A:
         log.info("EV: headroom too low (L1=%.1f L2=%.1f L3=%.1f) → paused",
                  head.l1, head.l2, head.l3)
         _current_setpoint = CHARGER_MIN_A
         _display("paused", 0)
+        _set_status("paused", f"Headroom too low (min {head.mn():.1f}A < {CHARGER_MIN_A}A)",
+                    soc=f"{soc:.0f}", max_safe=f"{max_safe}")
         return
 
     # ── Energy & deadline ──────────────────────────────────────────────────
@@ -215,12 +271,16 @@ def _run():
         dl += _dt.timedelta(days=1)
 
     # ── Price-optimized scheduling ─────────────────────────────────────────
-    is_cheap, charge_hrs = _price_schedule(now, dl, needed_kwh)
+    is_cheap, charge_hrs, cheap_labels = _price_schedule(now, dl, needed_kwh)
+    _set_schedule(is_cheap, charge_hrs, needed_kwh, price, cheap_labels)
 
     if not is_cheap and charger_mode == "connected_requesting":
         log.info("EV: waiting for cheaper hour (need=%.1fkWh, %dh cheap, SOC=%.0f%%, price=%.2f)",
                  needed_kwh, charge_hrs, soc, price)
         _display("paused", 0)
+        _set_status("waiting", f"Expensive hour, waiting ({charge_hrs}h cheap remaining)",
+                    soc=f"{soc:.0f}", price=f"{price:.2f}",
+                    cheap_hours=", ".join(cheap_labels) if cheap_labels else "N/A")
         return
 
     # ── Target current: finish within allocated charge hours ───────────────
@@ -250,6 +310,13 @@ def _run():
     _current_setpoint = new_current
     _send(new_current, new_current, new_current)
     _display("3-phase", new_current)
+
+    _set_status("charging", f"3-phase {new_current}A (safe={max_safe} desired={desired})",
+                soc=f"{soc:.0f}", setpoint=f"{new_current}",
+                max_safe=f"{max_safe}", desired=f"{desired}", min_a=f"{min_a}",
+                price=f"{price:.2f}", is_cheap=str(is_cheap),
+                deadline=dl.strftime("%H:%M"), needed_kwh=f"{needed_kwh:.1f}",
+                charge_hours=f"{charge_hrs}")
 
 
 def _send(p1, p2, p3):

@@ -47,13 +47,6 @@ INPUT_NUMBERS = [
         "icon": "mdi:current-ac",
     },
     {
-        "name": "EV Cheap Price Threshold",
-        "object_id": "ev_cheap_price_threshold",
-        "min": 0.0, "max": 5.0, "step": 0.05, "initial": 0.80,
-        "unit_of_measurement": "SEK/kWh", "mode": "box",
-        "icon": "mdi:cash-clock",
-    },
-    {
         "name": "EV Charging Current Setpoint",
         "object_id": "ev_charging_current_setpoint",
         "min": 0, "max": 16, "step": 1, "initial": 0,

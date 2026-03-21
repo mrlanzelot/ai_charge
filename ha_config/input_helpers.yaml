@@ -36,16 +36,6 @@ input_number:
     mode: slider
     icon: mdi:current-ac
 
-  ev_cheap_price_threshold:
-    name: "EV Cheap Price Threshold"
-    min: 0.0
-    max: 5.0
-    step: 0.05
-    initial: 0.80
-    unit_of_measurement: "SEK/kWh"
-    mode: box
-    icon: mdi:cash-clock
-
   ev_charging_current_setpoint:
     name: "EV Charging Current Setpoint"
     min: 0
