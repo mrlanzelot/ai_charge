@@ -201,7 +201,7 @@ def ev_startup():
               friendly_name="EV Schedule")
 
 
-@state_trigger("input_button.ev_force_start")
+@state_trigger("input_button.ev_force_start_charging")
 def ev_force_start(**kwargs):
     """Force-start charging immediately, bypassing time window and price schedule."""
     global _force_start
