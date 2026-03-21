@@ -1,5 +1,6 @@
 """
 Deploy EV charging helpers and automations to Home Assistant.
+Version: 1.0.0
 
 Usage:
     python deploy.py --token YOUR_HA_TOKEN [--host 192.168.68.88] [--port 8123]

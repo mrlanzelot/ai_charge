@@ -1,5 +1,6 @@
 """
 Unit tests for the EV charging algorithm.
+Version: 1.0.0
 
 Run with:  pytest tests/test_algorithm.py -v
 """

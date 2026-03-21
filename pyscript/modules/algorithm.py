@@ -1,5 +1,6 @@
 """
 EV Charging Algorithm – pure Python, no Home Assistant dependency.
+Version: 1.0.0
 
 Phase mapping (Zaptec Go 2 rotation L3, L1, L2 – TN):
   Grid L1 = Zaptec Phase 2  →  sensor.gpn007772_current_phase_2

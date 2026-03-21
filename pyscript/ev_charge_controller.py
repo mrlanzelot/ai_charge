@@ -1,5 +1,6 @@
 """
 Smart EV Charging Controller – single-file pyscript for Home Assistant.
+Version: 1.0.0
 
 Deploy to: /config/pyscript/ev_charge_controller.py  (this is the only file needed)
 
@@ -32,6 +33,7 @@ import urllib.request as _urlreq
 from dataclasses import dataclass
 
 # ── Constants ───────────────────────────────────────────────────────────────────
+VERSION = "1.0.0"
 INSTALLATION_ID = "8180b165-484b-47e0-9dc4-eb2630ae0dad"
 CHARGER_MIN_A = 6
 CHARGER_MAX_A = 16
@@ -189,8 +191,8 @@ def _in_charge_window(now):
 
 @time_trigger("startup")
 def ev_startup():
-    log.info("EV Charge Controller loaded (installation %s)", INSTALLATION_ID)
-    _set_status("idle", "Controller loaded, waiting for trigger")
+    log.info("EV Charge Controller v%s loaded (installation %s)", VERSION, INSTALLATION_ID)
+    _set_status("idle", f"Controller v{VERSION} loaded, waiting for trigger")
     state.set("pyscript.ev_headroom", "—",
               headroom_l1="—", headroom_l2="—", headroom_l3="—",
               house_l1="—", house_l2="—", house_l3="—",
