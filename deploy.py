@@ -1,6 +1,6 @@
 """
 Deploy EV charging helpers and automations to Home Assistant.
-Version: 1.0.0
+Version: 1.1.0
 
 Usage:
     python deploy.py --token YOUR_HA_TOKEN [--host 192.168.68.88] [--port 8123]
@@ -124,19 +124,14 @@ AUTOMATIONS = [
     },
     {
         "alias": "EV – Disable smart charging in the morning",
-        "description": "Turns off smart charging at 06:00 and restores max current.",
+        "description": "Turns off smart charging at 06:00. The ev_toggle_off pyscript trigger sends 0A.",
         "triggers": [{"trigger": "time", "at": "06:00:00"}],
         "conditions": [],
         "actions": [
             {"action": "input_boolean.turn_off",
              "target": {"entity_id": "input_boolean.ev_smart_charging_enabled"}},
-            {"action": "zaptec.limit_current",
-             "data": {
-                 "installation_id": "8180b165-484b-47e0-9dc4-eb2630ae0dad",
-                 "available_current": 16,
-             }},
             {"action": "logbook.log",
-             "data": {"name": "EV Charger", "message": "Smart charging ended. Charger restored to 16A."}},
+             "data": {"name": "EV Charger", "message": "Smart charging ended. Charger paused."}},
         ],
         "mode": "single",
     },
