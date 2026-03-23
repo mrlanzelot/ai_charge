@@ -1,6 +1,6 @@
 """
 Smart EV Charging Controller – single-file pyscript for Home Assistant.
-Version: 1.0.0
+Version: 1.1.0
 
 Deploy to: /config/pyscript/ev_charge_controller.py  (this is the only file needed)
 
@@ -35,7 +35,7 @@ from dataclasses import dataclass
 # ── Constants ───────────────────────────────────────────────────────────────────
 VERSION = "1.0.0"
 INSTALLATION_ID = "8180b165-484b-47e0-9dc4-eb2630ae0dad"
-CHARGER_MIN_A = 6
+CHARGER_MIN_A = 8
 CHARGER_MAX_A = 16
 VOLTAGE = 230
 BATTERY_KWH = 69.0
