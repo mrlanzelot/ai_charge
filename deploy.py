@@ -1,6 +1,6 @@
 """
 Deploy EV charging helpers and automations to Home Assistant.
-Version: 1.1.0
+Version: 1.2.0
 
 Usage:
     python deploy.py --token YOUR_HA_TOKEN [--host 192.168.68.88] [--port 8123]
@@ -86,7 +86,7 @@ INPUT_DATETIMES = [
         "object_id": "ev_charge_deadline",
         "has_date": False,
         "has_time": True,
-        "initial": "06:00:00",
+        "initial": "07:00:00",
         "icon": "mdi:clock-end",
     },
 ]
@@ -124,8 +124,8 @@ AUTOMATIONS = [
     },
     {
         "alias": "EV – Disable smart charging in the morning",
-        "description": "Turns off smart charging at 06:00. The ev_toggle_off pyscript trigger sends 0A.",
-        "triggers": [{"trigger": "time", "at": "06:00:00"}],
+        "description": "Turns off smart charging at 07:00. The ev_toggle_off pyscript trigger sends 0A.",
+        "triggers": [{"trigger": "time", "at": "07:00:00"}],
         "conditions": [],
         "actions": [
             {"action": "input_boolean.turn_off",
@@ -137,7 +137,7 @@ AUTOMATIONS = [
     },
     {
         "alias": "EV – Deadline warning at 03:00",
-        "description": "Sends notification at 03:00 if car won't be fully charged by 06:00.",
+        "description": "Sends notification at 03:00 if car won't be fully charged by 07:00.",
         "triggers": [{"trigger": "time", "at": "03:00:00"}],
         "conditions": [
             {"condition": "template",
@@ -178,7 +178,7 @@ AUTOMATIONS = [
             {"condition": "template",
              "value_template": (
                  "{% set start = states('input_datetime.ev_charge_start_time') | default('22:00:00') %}"
-                 "{% set end = states('input_datetime.ev_charge_deadline') | default('06:00:00') %}"
+                 "{% set end = states('input_datetime.ev_charge_deadline') | default('07:00:00') %}"
                  "{% set now_t = now().strftime('%H:%M:%S') %}"
                  "{% if start > end %}{{ now_t >= start or now_t < end }}"
                  "{% else %}{{ start <= now_t < end }}{% endif %}"
@@ -292,14 +292,14 @@ async def deploy(host: str, port: int, token: str):
             status = "✅" if resp.get("success") else "❌"
             print(f"  {status} input_datetime.{h['object_id']}: {h['name']}")
 
-        # Set deadline to 06:00 (initial not supported by create API)
+        # Set deadline to 07:00 (initial not supported by create API)
         await ws_command(ws, {
             "id": msg_id, "type": "call_service",
             "domain": "input_datetime", "service": "set_datetime",
-            "service_data": {"entity_id": "input_datetime.ev_charge_deadline", "time": "06:00:00"},
+            "service_data": {"entity_id": "input_datetime.ev_charge_deadline", "time": "07:00:00"},
         })
         msg_id += 1
-        print("    (deadline set to 06:00)")
+        print("    (deadline set to 07:00)")
 
         # ── Create input_select helpers ─────────────────────────────────────
         print("\n📋 Creating input_select helpers...")

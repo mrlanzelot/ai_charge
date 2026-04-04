@@ -27,11 +27,11 @@
 
 - alias: "EV – Disable smart charging in the morning"
   description: >
-    At 06:00, turns off smart charging. The ev_toggle_off trigger in
+    At 07:00, turns off smart charging. The ev_toggle_off trigger in
     pyscript sends 0A to the charger, preventing uncontrolled charging.
   triggers:
     - trigger: time
-      at: "06:00:00"
+      at: "07:00:00"
   conditions: []
   actions:
     - action: input_boolean.turn_off
@@ -46,7 +46,7 @@
 - alias: "EV – Deadline warning at 03:00"
   description: >
     Sends a persistent notification at 03:00 if the car is still charging
-    and won't reach its target SOC by 06:00 at the current rate.
+    and won't reach its target SOC by 07:00 at the current rate.
   triggers:
     - trigger: time
       at: "03:00:00"
@@ -84,7 +84,7 @@
     - condition: template
       value_template: >
         {% set start = states('input_datetime.ev_charge_start_time') | default('22:00:00') %}
-        {% set end = states('input_datetime.ev_charge_deadline') | default('06:00:00') %}
+        {% set end = states('input_datetime.ev_charge_deadline') | default('07:00:00') %}
         {% set now_t = now().strftime('%H:%M:%S') %}
         {% if start > end %}
           {{ now_t >= start or now_t < end }}

@@ -1,6 +1,6 @@
 """
 Unit tests for the EV charging algorithm.
-Version: 1.0.0
+Version: 1.1.0
 
 Run with:  pytest tests/test_algorithm.py -v
 """
@@ -254,16 +254,16 @@ class TestApplyPriceAndDeadline:
 # ── Hours until deadline ────────────────────────────────────────────────────────
 
 class TestHoursUntilDeadline:
-    def test_6am_deadline_at_11pm(self):
+    def test_7am_deadline_at_11pm(self):
         now = datetime(2026, 3, 6, 23, 0, 0)
-        h = hours_until_deadline(time(6, 0), now)
-        assert h == pytest.approx(7.0, abs=0.01)
+        h = hours_until_deadline(time(7, 0), now)
+        assert h == pytest.approx(8.0, abs=0.01)
 
     def test_deadline_already_passed_today(self):
-        """If 06:00 has passed (it's 08:00), next deadline is tomorrow."""
+        """If 07:00 has passed (it's 08:00), next deadline is tomorrow."""
         now = datetime(2026, 3, 6, 8, 0, 0)
-        h = hours_until_deadline(time(6, 0), now)
-        assert h == pytest.approx(22.0, abs=0.01)
+        h = hours_until_deadline(time(7, 0), now)
+        assert h == pytest.approx(23.0, abs=0.01)
 
 
 # ── Full pipeline integration test ──────────────────────────────────────────────
@@ -277,7 +277,7 @@ class TestRunAlgorithm:
             current_soc=70.0,
             target_soc=90.0,
             fuse_limit=18.0,
-            deadline=time(6, 0),
+            deadline=time(7, 0),
             current_price=0.50,
             cheap_threshold=0.80,
             now=datetime(2026, 3, 6, 23, 0, 0),
@@ -294,7 +294,7 @@ class TestRunAlgorithm:
             current_soc=70.0,
             target_soc=90.0,
             fuse_limit=18.0,
-            deadline=time(6, 0),
+            deadline=time(7, 0),
             current_price=0.50,
             cheap_threshold=0.80,
             now=datetime(2026, 3, 6, 23, 0, 0),
@@ -312,7 +312,7 @@ class TestRunAlgorithm:
             current_soc=90.0,
             target_soc=90.0,
             fuse_limit=18.0,
-            deadline=time(6, 0),
+            deadline=time(7, 0),
             current_price=0.50,
             cheap_threshold=0.80,
             now=datetime(2026, 3, 6, 23, 0, 0),

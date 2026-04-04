@@ -3,7 +3,7 @@
 ## Problem Statement
 Automatically charge a **Volvo EX30** (69 kWh battery, 90% target) via a **Zaptec Go 2**
 charger, keeping total current per phase ≤ 18A (house fuses), and ensuring the car is
-fully charged by **06:00** every morning.
+fully charged by **07:00** every morning.
 
 ## Current System State (HA v2026.3.0)
 
@@ -60,7 +60,7 @@ ELSE:
     PAUSE charging entirely (all phases below 6A minimum)
 
 # ── Deadline enforcement ────────────────────────────────────────────────────
-hours_to_06          = time remaining until 06:00 (hours)
+hours_to_07          = time remaining until 07:00 (hours)
 active_phases        = 3 if mode == "3-phase" else 1
 energy_remaining     = (target_soc - current_soc) / 100 * 69.0   # kWh
 min_for_deadline     = energy_remaining / (hours_to_06 * active_phases * 0.230)
@@ -118,7 +118,7 @@ The `zaptec.limit_current` service supports per-phase limits when called with
 
 | Entity | Default | Purpose |
 |---|---|---|
-| `input_datetime.ev_charge_deadline` | 06:00 | Car must be full by this time |
+| `input_datetime.ev_charge_deadline` | 07:00 | Car must be full by this time |
 | `input_number.ev_target_soc` | 90% | Charge target (%) |
 | `input_number.ev_max_house_current` | 18A | Safety margin (actual fuses: 20A) |
 | `input_boolean.ev_smart_charging_enabled` | on | Manual kill switch |
@@ -158,8 +158,8 @@ Pure Python tests, no HA dependency. Cover:
 
 ### T5 – Create HA automations
 - **`ev_charge_start_night`**: At 22:00, if car connected → enable smart charging
-- **`ev_charge_stop_morning`**: At 06:00 or SOC ≥ target → disable smart charging
-- **`ev_charge_deadline_warning`**: At 03:00, notify if car won't reach target by 06:00
+- **`ev_charge_stop_morning`**: At 07:00 or SOC ≥ target → disable smart charging
+- **`ev_charge_deadline_warning`**: At 03:00, notify if car won't reach target by 07:00
 
 ### T6 – Verify phase mapping ✅ DONE
 Zaptec phase rotation L3, L1, L2 (TN) confirmed from Zaptec Go app.
@@ -199,7 +199,7 @@ Delete unused `input_number.ev_cheap_price_threshold` from:
 - `input_boolean.ev_smart_charging_enabled = off` instantly halts all adjustments
 
 ## Time-Window Logic
-- Smart control active: **22:00 – 06:00**
+- Smart control active: **22:00 – 07:00**
 - Outside window + car connected: set to max (16A) – daytime fast charge
 - Late arrival (after midnight, low SOC): algorithm runs immediately regardless
 

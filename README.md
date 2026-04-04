@@ -6,7 +6,7 @@ managed by Home Assistant with a Perific load balancer and Nord Pool electricity
 ## What it does
 
 - **Load balances** charging current so total house current stays below 18 A per phase
-- **Guarantees** the car is fully charged by 06:00 every morning
+- **Guarantees** the car is fully charged by 07:00 every morning
 - **Optimises cost** by charging at full speed during cheap Nord Pool hours and throttling during expensive hours
 - **Switches** between 3-phase and 1-phase charging to maximise delivered power
 - All parameters are **adjustable from the HA dashboard** – no code changes needed
@@ -102,7 +102,7 @@ All settings are adjustable from the HA dashboard with no code changes:
 | Helper | Default | Description |
 |---|---|---|
 | `input_boolean.ev_smart_charging_enabled` | on | Master on/off switch |
-| `input_datetime.ev_charge_deadline` | 06:00 | Car must be full by this time |
+| `input_datetime.ev_charge_deadline` | 07:00 | Car must be full by this time |
 | `input_number.ev_target_soc` | 90% | Charge target SOC |
 | `input_number.ev_max_house_current` | 18 A | Safety margin (actual fuses: 20 A) |
 | `input_number.ev_cheap_price_threshold` | 0.80 SEK/kWh | Below = charge at max safe speed |
@@ -124,7 +124,7 @@ headroom_lX = fuse_limit − house_lX          # default fuse_limit = 18 A
 → pick whichever gives more watts
 
 # 4. Enforce charge deadline
-min_current = energy_remaining / (hours_until_06:00 × phases × 0.230)
+min_current = energy_remaining / (hours_until_07:00 × phases × 0.230)
 
 # 5. Nord Pool price optimisation
 cheap hour  → charge at max safe current
@@ -148,9 +148,9 @@ Expected: **28 passed**
 | Automation | Trigger | Action |
 |---|---|---|
 | EV – Enable smart charging at night | 22:00 | Turn on `ev_smart_charging_enabled` if car connected |
-| EV – Disable smart charging in the morning | 06:00 | Turn off, restore 16 A |
+| EV – Disable smart charging in the morning | 07:00 | Turn off, restore 16 A |
 | EV – Deadline warning at 03:00 | 03:00 | Notify if car won't make target |
-| EV – Start charging on arrival if night window | Car connects 22:00–06:00 | Enable smart charging immediately |
+| EV – Start charging on arrival if night window | Car connects 22:00–07:00 | Enable smart charging immediately |
 
 ## Troubleshooting
 

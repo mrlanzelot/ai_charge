@@ -1,6 +1,6 @@
 """
 Smart EV Charging Controller – single-file pyscript for Home Assistant.
-Version: 1.1.0
+Version: 1.2.0
 
 Deploy to: /config/pyscript/ev_charge_controller.py  (this is the only file needed)
 
@@ -171,17 +171,17 @@ def _price_schedule(now, deadline_dt, needed_kwh):
 def _in_charge_window(now):
     """Check if current time is within the charge start→deadline window."""
     start_str = state.get("input_datetime.ev_charge_start_time") or "22:00:00"
-    end_str = state.get("input_datetime.ev_charge_deadline") or "06:00:00"
+    end_str = state.get("input_datetime.ev_charge_deadline") or "07:00:00"
     try:
         sh, sm = start_str.split(":")[:2]
         eh, em = end_str.split(":")[:2]
         start = _dt.time(int(sh), int(sm))
         end = _dt.time(int(eh), int(em))
     except Exception:
-        start, end = _dt.time(22, 0), _dt.time(6, 0)
+        start, end = _dt.time(22, 0), _dt.time(7, 0)
 
     t = now.time()
-    if start > end:  # overnight window (e.g. 22:00→06:00)
+    if start > end:  # overnight window (e.g. 22:00→07:00)
         return t >= start or t < end
     else:  # same-day window (e.g. 08:00→18:00)
         return start <= t < end
@@ -323,12 +323,12 @@ def _run():
     # ── Energy & deadline ──────────────────────────────────────────────────
     needed_kwh = (target - soc) / 100.0 * BATTERY_KWH
 
-    dl_str = state.get("input_datetime.ev_charge_deadline") or "06:00:00"
+    dl_str = state.get("input_datetime.ev_charge_deadline") or "07:00:00"
     try:
         h, m = dl_str.split(":")[:2]
         deadline_time = _dt.time(int(h), int(m))
     except Exception:
-        deadline_time = _dt.time(6, 0)
+        deadline_time = _dt.time(7, 0)
     dl = _dt.datetime.combine(now.date(), deadline_time)
     if dl <= now:
         dl += _dt.timedelta(days=1)
