@@ -33,7 +33,7 @@ import urllib.request as _urlreq
 from dataclasses import dataclass
 
 # ── Constants ───────────────────────────────────────────────────────────────────
-VERSION = "1.0.0"
+VERSION = "1.2.0"
 INSTALLATION_ID = "8180b165-484b-47e0-9dc4-eb2630ae0dad"
 CHARGER_MIN_A = 8
 CHARGER_MAX_A = 16
